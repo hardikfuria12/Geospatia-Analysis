@@ -1,0 +1,104 @@
+
+//VIDEO LINK:
+https://youtu.be/-3dIMmkuwFw
+
+
+
+
+
+
+
+hadoop fs -mkdir /datasets
+ 
+hadoop fs -copyFromLocal /home/hduser/arealm.csv /datasets/arealm.csv
+hadoop fs -copyFromLocal /home/hduser/zcta510.csv /datasets/zcta510.csv
+hadoop fs -ls /datasets
+
+ spark-shell --master spark://192.168.0.6:7077 --jars geospark-1.0.1.jar
+
+import org.datasyslab.geospark.spatialOperator.RangeQuery;
+import org.datasyslab.geospark.spatialRDD.PointRDD;
+import com.vividsolutions.jts.geom.Envelope;
+import org.datasyslab.geospark.enums.FileDataSplitter;
+import org.datasyslab.geospark.spatialOperator.RangeQuery;
+import org.datasyslab.geospark.spatialRDD.PointRDD;
+import org.datasyslab.geospark.enums.IndexType;
+import org.datasyslab.geospark.spatialOperator.KNNQuery;
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.geom.Coordinate;
+import org.datasyslab.geospark.spatialOperator.JoinQuery;
+import org.datasyslab.geospark.enums.GridType;
+import org.apache.spark.storage.StorageLevel;
+import org.datasyslab.geospark.spatialRDD.RectangleRDD;
+//TASK 1
+val objectRDD = new PointRDD(sc, "hdfs://rajubuntu:9000/datasets/arealm.csv", 0, FileDataSplitter.CSV, false)
+ 
+print(objectRDD.countWithoutDuplicates())
+
+//TASK 2
+
+//TASK 2.1 Spatial Query without index
+val queryEnvelope=new Envelope (-113.79,-109.73,35.08,32.99)
+val resultSize = RangeQuery.SpatialRangeQuery(objectRDD, queryEnvelope, false, false).count()
+print(resultSize)
+
+//TASK 2.2 Spatial Query with index
+objectRDD.buildIndex(IndexType.RTREE,false)
+val resultSize = RangeQuery.SpatialRangeQuery(objectRDD, queryEnvelope, false, false).count()
+print(resultSize)
+
+//TASK 3 Spatial KNN Query
+//TASK 3.1
+
+val fact=new GeometryFactory();
+val objectRDD = new PointRDD(sc, "hdfs://rajubuntu:9000/datasets/arealm.csv", 0, FileDataSplitter.CSV, false)
+val KNNqueryPoint=fact.createPoint(new Coordinate(35.08,-113.79));
+val resultSize = KNNQuery.SpatialKnnQuery(objectRDD, KNNqueryPoint, 5,false);
+
+
+//TASK 3.2
+val fact=new GeometryFactory();
+val kNNQueryPoint=fact.createPoint(new Coordinate(35.08,-113.79));
+objectRDD.buildIndex(IndexType.RTREE,false)
+val result=KNNQuery.SpatialKnnQuery(objectRDD,kNNQueryPoint,5,true)
+print(result)
+
+
+//TASK 4 JOIN
+//TASK 4.1 Equal grid without R-tree Index
+
+
+val objectRDD = new PointRDD(sc, "hdfs://rajubuntu:9000/datasets/arealm.csv", 0, FileDataSplitter.CSV, false, StorageLevel.MEMORY_ONLY);
+
+val rectangleRDD = new RectangleRDD(sc, "hdfs://rajubuntu:9000/datasets/zcta510.csv", 0, FileDataSplitter.CSV, false, StorageLevel.MEMORY_ONLY);
+
+objectRDD.spatialPartitioning(GridType.EQUALGRID);
+rectangleRDD.spatialPartitioning(objectRDD.grids);
+val resultSize = JoinQuery.SpatialJoinQuery(objectRDD,rectangleRDD,false,false).count()
+print(resultSize)
+
+
+// TASK 4.2 Equal grid with R tree index
+
+val objectRDD = new PointRDD(sc, "hdfs://rajubuntu:9000/datasets/arealm.csv", 0, FileDataSplitter.CSV, false, StorageLevel.MEMORY_ONLY);
+
+val rectangleRDD = new RectangleRDD(sc, "hdfs://rajubuntu:9000/datasets/zcta510.csv", 0, FileDataSplitter.CSV, false, StorageLevel.MEMORY_ONLY);
+
+objectRDD.spatialPartitioning(GridType.EQUALGRID);
+
+objectRDD.buildIndex(IndexType.RTREE,true)
+rectangleRDD.spatialPartitioning(objectRDD.grids);
+val resultSize = JoinQuery.SpatialJoinQuery(objectRDD,rectangleRDD,true,false).count();
+print(resultSize);
+
+// TASK 4.3
+ R-Tree grid without R tree index
+val objectRDD = new PointRDD(sc, "hdfs://rajubuntu:9000/datasets/arealm.csv", 0, FileDataSplitter.CSV, false, StorageLevel.MEMORY_ONLY);
+val rectangleRDD = new RectangleRDD(sc, "hdfs://rajubuntu:9000/datasets/zcta510.csv", 0, FileDataSplitter.CSV, false, StorageLevel.MEMORY_ONLY);
+objectRDD.spatialPartitioning(GridType.RTREE);
+rectangleRDD.spatialPartitioning(objectRDD.grids);
+val resultSize = JoinQuery.SpatialJoinQuery(objectRDD,rectangleRDD,false,false).count();
+print(resultSize);
+
+
